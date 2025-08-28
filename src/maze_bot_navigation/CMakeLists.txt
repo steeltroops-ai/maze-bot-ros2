@@ -15,9 +15,16 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(OpenCV REQUIRED)
 
-# Add executable
+# Include directories
+include_directories(include)
+
+# Add executables
 add_executable(maze_navigator src/maze_navigator.cpp)
+add_executable(vision_target_detector src/vision_target_detector.cpp)
 ament_target_dependencies(maze_navigator
   rclcpp
   std_msgs
@@ -27,11 +34,28 @@ ament_target_dependencies(maze_navigator
   tf2
   tf2_ros
   tf2_geometry_msgs
+  cv_bridge
+  image_transport
 )
+
+# Link OpenCV libraries
+target_link_libraries(maze_navigator ${OpenCV_LIBRARIES})
+
+# Vision target detector dependencies
+ament_target_dependencies(vision_target_detector
+  rclcpp
+  std_msgs
+  sensor_msgs
+  geometry_msgs
+  cv_bridge
+  image_transport
+)
+target_link_libraries(vision_target_detector ${OpenCV_LIBRARIES})
 
 # Install targets
 install(TARGETS
   maze_navigator
+  vision_target_detector
   DESTINATION lib/${PROJECT_NAME}
 )
 

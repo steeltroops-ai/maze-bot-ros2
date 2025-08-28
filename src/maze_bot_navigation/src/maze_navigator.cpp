@@ -52,12 +52,31 @@ public:
         recovery_counter_ = 0;
         last_progress_time_ = 0.0;
 
+        // Initialize enhanced navigation variables
+        vision_target_detected_ = false;
+        vision_target_x_ = 0.0;
+        vision_target_y_ = 0.0;
+        vision_target_confidence_ = 0.0;
+        desired_wall_distance_ = 0.4;
+        wall_following_speed_factor_ = 1.0;
+        emergency_stop_distance_ = 0.15;
+        emergency_stop_active_ = false;
+        path_efficiency_ = 0.0;
+        collision_count_ = 0;
+        total_path_length_ = 0.0;
+        navigation_start_time_ = this->now();
+
         // Create subscribers
         laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", 10, std::bind(&MazeNavigator::laserCallback, this, std::placeholders::_1));
-        
+
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             "odom", 10, std::bind(&MazeNavigator::odomCallback, this, std::placeholders::_1));
+
+        // Vision target subscriber
+        vision_target_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
+            "/vision/target_position", 10,
+            std::bind(&MazeNavigator::visionTargetCallback, this, std::placeholders::_1));
 
         // Create publisher
         cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
@@ -83,6 +102,7 @@ private:
     // ROS2 components
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr vision_target_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -106,6 +126,27 @@ private:
     std::vector<std::pair<double, double>> hit_points_;
     int recovery_counter_;
     double last_progress_time_;
+
+    // Enhanced navigation variables
+    bool vision_target_detected_;
+    double vision_target_x_, vision_target_y_;
+    double vision_target_confidence_;
+
+    // Improved wall following
+    std::vector<double> wall_distance_history_;
+    double desired_wall_distance_;
+    double wall_following_speed_factor_;
+
+    // Sensor fusion and safety
+    double emergency_stop_distance_;
+    bool emergency_stop_active_;
+    std::vector<double> safety_zone_distances_;
+
+    // Performance monitoring
+    double path_efficiency_;
+    int collision_count_;
+    double total_path_length_;
+    rclcpp::Time navigation_start_time_;
 
     // Sensor data
     std::vector<float> laser_ranges_;
@@ -357,6 +398,23 @@ private:
             recovery_counter_ = 0;
             state_ = NavigationState::EXPLORE;
         }
+    }
+
+    void visionTargetCallback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
+    {
+        vision_target_detected_ = true;
+        vision_target_x_ = msg->point.x;
+        vision_target_y_ = msg->point.y;
+
+        // Calculate confidence based on distance and angle
+        double distance = std::sqrt(vision_target_x_ * vision_target_x_ + vision_target_y_ * vision_target_y_);
+        double angle = std::atan2(vision_target_y_, vision_target_x_);
+
+        // Higher confidence for targets that are closer and more centered
+        vision_target_confidence_ = std::exp(-distance / 5.0) * std::exp(-std::abs(angle) / 1.0);
+
+        RCLCPP_DEBUG(this->get_logger(), "Vision target detected at (%.2f, %.2f) with confidence %.2f",
+                    vision_target_x_, vision_target_y_, vision_target_confidence_);
     }
 
     void wallFollowingBehavior(geometry_msgs::msg::Twist& cmd_vel)
