@@ -1,0 +1,24 @@
+{
+    "names": {
+        "maze_bot_description": {
+            "cmake-args": [
+                "-DCMAKE_BUILD_TYPE=Release"
+            ]
+        },
+        "maze_bot_gazebo": {
+            "cmake-args": [
+                "-DCMAKE_BUILD_TYPE=Release"
+            ]
+        },
+        "maze_bot_navigation": {
+            "cmake-args": [
+                "-DCMAKE_BUILD_TYPE=Release"
+            ]
+        },
+        "maze_bot_bringup": {
+            "cmake-args": [
+                "-DCMAKE_BUILD_TYPE=Release"
+            ]
+        }
+    }
+}

@@ -1,0 +1,24 @@
+maze_navigator:
+  ros__parameters:
+    # Goal coordinates
+    goal_x: 4.0
+    goal_y: 4.0
+    goal_tolerance: 0.5
+    
+    # Speed limits
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+    
+    # Wall following parameters
+    wall_distance: 0.7        # Desired distance from wall
+    front_distance: 0.8       # Minimum front distance before turning
+    
+    # PID controller gains for wall following
+    kp_wall: 2.0             # Proportional gain
+    kd_wall: 0.5             # Derivative gain
+    
+    # Safety parameters
+    emergency_stop_distance: 0.3
+    
+    # Logging level
+    use_sim_time: true
