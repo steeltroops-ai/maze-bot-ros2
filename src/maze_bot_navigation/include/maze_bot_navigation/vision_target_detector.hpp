@@ -43,7 +43,7 @@ public:
 
 private:
     // ROS2 subscribers and publishers
-    image_transport::ImageTransport it_;
+    std::unique_ptr<image_transport::ImageTransport> it_;
     image_transport::Subscriber image_sub_;
     image_transport::Publisher debug_image_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr target_pub_;

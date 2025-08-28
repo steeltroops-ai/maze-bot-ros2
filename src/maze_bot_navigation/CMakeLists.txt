@@ -52,6 +52,8 @@ ament_target_dependencies(vision_target_detector
 )
 target_link_libraries(vision_target_detector ${OpenCV_LIBRARIES})
 
+# Remove advanced components for now
+
 # Install targets
 install(TARGETS
   maze_navigator

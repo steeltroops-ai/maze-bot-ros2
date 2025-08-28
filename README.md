@@ -1,106 +1,156 @@
-# Autonomous Maze-Solving Robot
+# Autonomous Maze Bot
 
-A ROS2-based autonomous navigation system featuring intelligent algorithms, SLAM integration, and comprehensive testing for robotics applications.
+A ROS2-based robot that can navigate through mazes using LiDAR sensors and navigation algorithms.
 
 ## Overview
 
-This project implements an autonomous maze-solving robot using ROS2, Gazebo simulation, and modern navigation algorithms. The system combines robust navigation capabilities with professional development tools.
+This project implements a maze-solving robot using ROS2 Humble and Gazebo simulation. The robot uses sensor data to avoid obstacles and find paths through complex environments.
 
-### Key Features
+## Features
 
-- **Intelligent Navigation**: Bug2 algorithm with potential field method for efficient pathfinding
-- **Real-time Mapping**: SLAM integration for dynamic environment mapping
-- **Sensor Fusion**: LiDAR and odometry integration for accurate localization
-- **Safety Systems**: Collision avoidance and recovery behaviors
-- **Testing Framework**: Automated validation and performance metrics
-- **Cross-platform**: Works on Windows (WSL), Linux, and macOS
+- Autonomous maze navigation
+- LiDAR-based obstacle detection
+- Computer vision target detection
+- Real-time path planning
+- Safety systems and collision avoidance
 
-## System Architecture
+## Project Structure
 
-The system consists of four main ROS2 packages:
+```
+src/
+├── maze_bot_description/     # Robot URDF and meshes
+├── maze_bot_gazebo/         # Gazebo simulation files
+├── maze_bot_navigation/     # Navigation algorithms
+└── maze_bot_bringup/        # Launch files
 
-- **maze_bot_description**: Robot URDF models and physical properties
-- **maze_bot_gazebo**: Simulation environment and world configurations
-- **maze_bot_navigation**: Navigation algorithms and control systems
-- **maze_bot_bringup**: Launch files and system integration
-
-### Navigation Algorithm
-
-The robot uses a hybrid approach combining:
-
-- **Bug2 Algorithm**: Guarantees goal reachability in maze environments
-- **Potential Fields**: Smooth obstacle avoidance and goal attraction
-- **State Machine**: Intelligent behavior switching (explore, wall-follow, goal-seek, recovery)
-
-## Quick Start
-
-### Prerequisites
-
-- ROS2 Humble (Ubuntu 22.04) or Foxy (Ubuntu 20.04)
-- Gazebo 11+
-- 8GB RAM minimum
-- Works on Windows (WSL), Linux, and macOS
-
-For detailed setup instructions, see the [Setup Guide](docs/setup-guide.md).
-
-### Installation and Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/steeltroops-ai/maze-bot-ros2.git
-cd maze-bot-ros2
-
-# Build the project
-source /opt/ros/humble/setup.bash
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-
-# Source the workspace
-source install/setup.bash
+scripts/
+├── test_autonomous_navigation.py    # Test script
+└── autonomous_navigation_demo.py    # Demo script
 ```
 
-### Launch the System
+## Build Instructions
 
+1. **Install Dependencies**
+   ```bash
+sudo apt update
+   sudo apt install ros-humble-desktop ros-humble-gazebo-ros-pkgs
+   sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup
+   sudo apt install python3-colcon-common-extensions
+```
+
+2. **Build the Project**
+   ```bash
+cd maze-bot-ros2
+   colcon build
+   source install/setup.bash
+```
+
+## How to Run
+
+### Basic Simulation
 ```bash
-# Basic simulation
+# Launch the complete system
 ros2 launch maze_bot_bringup maze_bot_simulation.launch.py
 
-# SLAM-enabled navigation
-ros2 launch maze_bot_bringup slam_navigation.launch.py
+# In a new terminal, send navigation goals using RViz
+# Click "2D Nav Goal" in RViz and click on the map
 ```
 
-## Testing and Validation
-
-### Automated Testing
-
+### Individual Components
 ```bash
-# Robot stability test
-python3 scripts/test_robot_stability.py
+# Run just the navigation algorithm
+ros2 run maze_bot_navigation maze_navigator
 
-# Navigation performance test
-python3 scripts/test_navigation_algorithms.py
-
-# Basic navigation test
-python3 scripts/test_navigation.py
+# Run computer vision target detection
+ros2 run maze_bot_navigation vision_target_detector
 ```
 
-### Performance Metrics
+## Usage Examples
 
-- **Navigation Success Rate**: >95% in standard maze configurations
-- **Average Completion Time**: <3 minutes for standard mazes
-- **Collision Avoidance**: 100% success rate with proper tuning
-- **Goal Accuracy**: ±0.25m from target position
+### Setting Navigation Goals
+```bash
+# Send a goal via command line
+ros2 topic pub /move_base_simple/goal geometry_msgs/PoseStamped "
+header:
+  frame_id: 'map'
+pose:
+  position: {x: 4.0, y: 4.0, z: 0.0}
+  orientation: {w: 1.0}
+"
+```
 
-## Documentation
+### Running Tests
+```bash
+# Run the automated test suite
+python3 scripts/test_autonomous_navigation.py
 
-- **[Setup Guide](docs/setup-guide.md)**: Complete installation instructions for all platforms
-- **[Usage Guide](docs/usage-guide.md)**: Detailed usage examples and launch options
-- **[Troubleshooting](docs/troubleshooting.md)**: Common issues and solutions
-- **[Parameters](docs/parameters.md)**: Configuration options and tuning guide
+# Run the demonstration
+python3 scripts/autonomous_navigation_demo.py
+```
 
-## Contributing
+### Monitoring Robot Status
+```bash
+# View robot position
+ros2 topic echo /odom
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Commit changes: `git commit -m 'Add new feature'`
-4. Push to branch: `git push origin feature/new-feature`
-5. Open Pull Request
+# View laser scan data
+ros2 topic echo /scan
+
+# View navigation commands
+ros2 topic echo /cmd_vel
+```
+
+## Launch Files
+
+| Launch File | Description |
+|-------------|-------------|
+| `maze_bot_simulation.launch.py` | Complete system with Gazebo |
+| `slam_navigation.launch.py` | SLAM-enabled navigation |
+| `gazebo.launch.py` | Gazebo simulation only |
+| `rviz.launch.py` | RViz visualization only |
+
+## Configuration
+
+Key parameters can be adjusted in:
+- `config/navigation_params.yaml` - Navigation settings
+- `config/robot_params.yaml` - Robot configuration
+- `worlds/maze.world` - Simulation environment
+
+## Troubleshooting
+
+### Common Issues
+
+**Build Errors:**
+```bash
+# Clean and rebuild
+rm -rf build/ install/ log/
+colcon build
+```
+
+**Gazebo Won't Start:**
+```bash
+# Check if Gazebo is already running
+killall gzserver gzclient
+```
+
+**Robot Doesn't Move:**
+- Check if navigation goals are being published
+- Verify laser scan data is available
+- Ensure the robot is not in an obstacle
+
+### Getting Help
+
+1. Check the logs: `ros2 topic echo /rosout`
+2. Verify topics: `ros2 topic list`
+3. Check node status: `ros2 node list`
+
+## Requirements
+
+- Ubuntu 22.04 LTS
+- ROS2 Humble
+- Gazebo 11
+- Python 3.10+
+
+## License
+
+This project is open source and available under the MIT License.

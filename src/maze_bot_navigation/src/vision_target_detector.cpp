@@ -5,7 +5,6 @@ namespace maze_bot_navigation
 
 VisionTargetDetector::VisionTargetDetector()
     : Node("vision_target_detector"),
-      it_(shared_from_this()),
       camera_info_received_(false)
 {
     // Initialize detection parameters
@@ -23,21 +22,30 @@ VisionTargetDetector::VisionTargetDetector()
     // Initialize detection state
     latest_detection_.valid = false;
     last_detection_time_ = this->now();
-    
-    // ROS2 subscribers and publishers
-    image_sub_ = it_.subscribe("/camera/image_raw", 1, 
-        std::bind(&VisionTargetDetector::imageCallback, this, std::placeholders::_1));
-    
-    debug_image_pub_ = it_.advertise("/vision/debug_image", 1);
+
+    // Initialize image transport (delayed to avoid shared_from_this issue)
+    // Will be initialized in first callback
     
     target_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>(
         "/vision/target_position", 10);
-    
+
     // Subscribe to camera info
     auto camera_info_sub = this->create_subscription<sensor_msgs::msg::CameraInfo>(
         "/camera/camera_info", 1,
         std::bind(&VisionTargetDetector::cameraInfoCallback, this, std::placeholders::_1));
-    
+
+    // Initialize image transport after construction
+    auto timer = this->create_wall_timer(
+        std::chrono::milliseconds(100),
+        [this]() {
+            if (!it_) {
+                it_ = std::make_unique<image_transport::ImageTransport>(shared_from_this());
+                image_sub_ = it_->subscribe("/camera/image_raw", 1,
+                    std::bind(&VisionTargetDetector::imageCallback, this, std::placeholders::_1));
+                debug_image_pub_ = it_->advertise("/vision/debug_image", 1);
+            }
+        });
+
     RCLCPP_INFO(this->get_logger(), "Vision Target Detector initialized");
 }
 

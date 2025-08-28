@@ -1,10 +1,25 @@
 # Usage Guide
 
-This guide covers how to run and use the Autonomous Maze-Solving Bot system.
+This guide covers how to run and use the maze-solving robot system.
 
 ## Quick Start
 
 ### Basic Simulation
+
+```bash
+# Launch the complete system
+ros2 launch maze_bot_bringup maze_bot_simulation.launch.py
+```
+
+### Individual Components
+
+```bash
+# Run navigation algorithm
+ros2 run maze_bot_navigation maze_navigator
+
+# Run vision target detector
+ros2 run maze_bot_navigation vision_target_detector
+```
 
 Launch the complete system with default settings:
 
@@ -17,6 +32,7 @@ ros2 launch maze_bot_bringup maze_bot_simulation.launch.py
 ```
 
 This will start:
+
 - Gazebo simulation with the maze environment
 - Robot model with sensors
 - Navigation algorithms
@@ -32,6 +48,7 @@ ros2 launch maze_bot_bringup slam_navigation.launch.py
 ```
 
 This includes:
+
 - SLAM toolbox for mapping
 - Nav2 navigation stack
 - Enhanced navigation algorithms
@@ -55,13 +72,13 @@ ros2 launch maze_bot_bringup maze_bot_simulation.launch.py params_file:=/path/to
 
 ### Available Launch Files
 
-| Launch File | Description |
-|-------------|-------------|
+| Launch File                     | Description                         |
+| ------------------------------- | ----------------------------------- |
 | `maze_bot_simulation.launch.py` | Complete simulation with navigation |
-| `slam_navigation.launch.py` | SLAM-enabled navigation |
-| `gazebo.launch.py` | Gazebo simulation only |
-| `rviz.launch.py` | RViz visualization only |
-| `navigation.launch.py` | Navigation algorithms only |
+| `slam_navigation.launch.py`     | SLAM-enabled navigation             |
+| `gazebo.launch.py`              | Gazebo simulation only              |
+| `rviz.launch.py`                | RViz visualization only             |
+| `navigation.launch.py`          | Navigation algorithms only          |
 
 ## Manual Control
 
@@ -78,6 +95,7 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
 Use these keys:
+
 - `i` - Move forward
 - `k` - Stop
 - `j` - Turn left
@@ -152,6 +170,7 @@ python3 scripts/test_robot_stability.py
 ```
 
 This test will:
+
 - Monitor robot orientation and detect flipping
 - Test various motion patterns
 - Generate stability score and recommendations
@@ -165,6 +184,7 @@ python3 scripts/test_navigation_algorithms.py
 ```
 
 This test will:
+
 - Run multiple navigation scenarios
 - Measure success rate and efficiency
 - Generate performance reports
@@ -204,6 +224,7 @@ ros2 bag play <bag_file_name>
 ### Parameter Tuning
 
 Key parameters can be adjusted in:
+
 - `src/maze_bot_navigation/config/navigation_params.yaml`
 - `src/maze_bot_bringup/config/nav2_params.yaml`
 - `src/maze_bot_bringup/config/slam_params.yaml`
@@ -246,12 +267,14 @@ ROS_DOMAIN_ID=2 ros2 launch maze_bot_bringup maze_bot_simulation.launch.py robot
 ### Custom Worlds
 
 Create custom maze environments by modifying:
+
 - `src/maze_bot_gazebo/worlds/maze_world.world`
 - Add new world files and update launch files accordingly
 
 ### Integration with External Systems
 
 The system can be integrated with:
+
 - External path planning systems
 - Computer vision pipelines
 - Machine learning frameworks
