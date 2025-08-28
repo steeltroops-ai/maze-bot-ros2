@@ -10,9 +10,17 @@ find_package(ament_cmake REQUIRED)
 
 # Install directories
 install(
-  DIRECTORY urdf launch meshes
+  DIRECTORY urdf launch
   DESTINATION share/${PROJECT_NAME}
 )
+
+# Install meshes directory if it exists
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/meshes")
+  install(
+    DIRECTORY meshes
+    DESTINATION share/${PROJECT_NAME}
+  )
+endif()
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

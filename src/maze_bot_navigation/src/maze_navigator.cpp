@@ -41,8 +41,16 @@ public:
         current_y_ = 0.0;
         current_yaw_ = 0.0;
         previous_wall_error_ = 0.0;
-        state_ = NavigationState::WALL_FOLLOWING;
+        state_ = NavigationState::EXPLORE;
         goal_reached_ = false;
+
+        // Initialize Bug2 algorithm variables
+        start_x_ = 0.0;
+        start_y_ = 0.0;
+        on_m_line_ = true;
+        closest_distance_to_goal_ = std::numeric_limits<double>::max();
+        recovery_counter_ = 0;
+        last_progress_time_ = 0.0;
 
         // Create subscribers
         laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -64,9 +72,11 @@ public:
 
 private:
     enum class NavigationState {
-        WALL_FOLLOWING,
+        EXPLORE,
+        WALL_FOLLOW,
+        GOAL_SEEK,
+        RECOVERY,
         TURNING,
-        GOAL_SEEKING,
         STOPPED
     };
 
@@ -87,6 +97,15 @@ private:
     double previous_wall_error_;
     NavigationState state_;
     bool goal_reached_;
+
+    // Bug2 algorithm variables
+    double start_x_, start_y_;
+    double m_line_slope_, m_line_intercept_;
+    bool on_m_line_;
+    double closest_distance_to_goal_;
+    std::vector<std::pair<double, double>> hit_points_;
+    int recovery_counter_;
+    double last_progress_time_;
 
     // Sensor data
     std::vector<float> laser_ranges_;
@@ -188,18 +207,31 @@ private:
             return;
         }
 
-        // Main navigation logic
+        // Bug2 Algorithm Implementation
         geometry_msgs::msg::Twist cmd_vel;
-        
+
+        // Initialize M-line on first run
+        if (start_x_ == 0.0 && start_y_ == 0.0) {
+            start_x_ = current_x_;
+            start_y_ = current_y_;
+            calculateMLine();
+        }
+
         switch (state_) {
-            case NavigationState::WALL_FOLLOWING:
+            case NavigationState::EXPLORE:
+                exploreBehavior(cmd_vel);
+                break;
+            case NavigationState::WALL_FOLLOW:
                 wallFollowingBehavior(cmd_vel);
+                break;
+            case NavigationState::GOAL_SEEK:
+                goalSeekingBehavior(cmd_vel);
+                break;
+            case NavigationState::RECOVERY:
+                recoveryBehavior(cmd_vel);
                 break;
             case NavigationState::TURNING:
                 turningBehavior(cmd_vel);
-                break;
-            case NavigationState::GOAL_SEEKING:
-                goalSeekingBehavior(cmd_vel);
                 break;
             case NavigationState::STOPPED:
                 publishStop();
@@ -209,9 +241,127 @@ private:
         cmd_vel_pub_->publish(cmd_vel);
     }
 
+    void calculateMLine()
+    {
+        // Calculate M-line from start to goal
+        if (std::abs(goal_x_ - start_x_) < 1e-6) {
+            // Vertical line
+            m_line_slope_ = std::numeric_limits<double>::infinity();
+            m_line_intercept_ = start_x_;
+        } else {
+            m_line_slope_ = (goal_y_ - start_y_) / (goal_x_ - start_x_);
+            m_line_intercept_ = start_y_ - m_line_slope_ * start_x_;
+        }
+    }
+
+    bool isOnMLine(double x, double y, double tolerance = 0.3)
+    {
+        if (std::isinf(m_line_slope_)) {
+            return std::abs(x - m_line_intercept_) < tolerance;
+        } else {
+            double expected_y = m_line_slope_ * x + m_line_intercept_;
+            return std::abs(y - expected_y) < tolerance;
+        }
+    }
+
+    bool hasLineOfSight()
+    {
+        // Ray-casting implementation for line-of-sight verification
+        double angle_to_goal = std::atan2(goal_y_ - current_y_, goal_x_ - current_x_);
+        double relative_angle = angle_to_goal - current_yaw_;
+
+        // Normalize angle
+        while (relative_angle > M_PI) relative_angle -= 2 * M_PI;
+        while (relative_angle < -M_PI) relative_angle += 2 * M_PI;
+
+        // Check if goal is roughly in front
+        if (std::abs(relative_angle) > M_PI/3) return false;
+
+        // Check laser scan in direction of goal
+        int num_readings = laser_ranges_.size();
+        if (num_readings == 0) return false;
+
+        // Convert relative angle to laser scan index
+        int goal_index = static_cast<int>((relative_angle + M_PI) / (2 * M_PI) * num_readings);
+        goal_index = std::max(0, std::min(num_readings - 1, goal_index));
+
+        // Check a cone around the goal direction
+        int cone_width = 10;
+        for (int i = -cone_width; i <= cone_width; ++i) {
+            int idx = goal_index + i;
+            if (idx >= 0 && idx < num_readings && std::isfinite(laser_ranges_[idx])) {
+                if (laser_ranges_[idx] < distance_to_goal() * 0.9) {
+                    return false; // Obstacle in the way
+                }
+            }
+        }
+        return true;
+    }
+
+    void exploreBehavior(geometry_msgs::msg::Twist& cmd_vel)
+    {
+        // Move towards goal until obstacle is encountered
+        if (min_front_distance_ < front_distance_) {
+            // Hit an obstacle, record hit point and switch to wall following
+            hit_points_.push_back({current_x_, current_y_});
+            state_ = NavigationState::WALL_FOLLOW;
+            on_m_line_ = false;
+            return;
+        }
+
+        // Check if we can see the goal
+        if (hasLineOfSight() && distance_to_goal() < 3.0) {
+            state_ = NavigationState::GOAL_SEEK;
+            return;
+        }
+
+        // Move towards goal
+        double angle_to_goal = std::atan2(goal_y_ - current_y_, goal_x_ - current_x_);
+        double angle_error = angle_to_goal - current_yaw_;
+
+        // Normalize angle
+        while (angle_error > M_PI) angle_error -= 2 * M_PI;
+        while (angle_error < -M_PI) angle_error += 2 * M_PI;
+
+        cmd_vel.linear.x = max_linear_speed_ * 0.8;
+        cmd_vel.angular.z = std::max(-max_angular_speed_,
+                                   std::min(max_angular_speed_, 2.0 * angle_error));
+    }
+
+    void recoveryBehavior(geometry_msgs::msg::Twist& cmd_vel)
+    {
+        // Recovery behavior: rotate in place to find new path
+        recovery_counter_++;
+
+        if (recovery_counter_ < 50) {
+            // Rotate left
+            cmd_vel.linear.x = 0.0;
+            cmd_vel.angular.z = max_angular_speed_ * 0.5;
+        } else if (recovery_counter_ < 100) {
+            // Rotate right
+            cmd_vel.linear.x = 0.0;
+            cmd_vel.angular.z = -max_angular_speed_ * 0.5;
+        } else {
+            // Move backward
+            cmd_vel.linear.x = -max_linear_speed_ * 0.3;
+            cmd_vel.angular.z = 0.0;
+
+            if (recovery_counter_ > 150) {
+                recovery_counter_ = 0;
+                state_ = NavigationState::EXPLORE;
+            }
+        }
+
+        // Check if recovery is successful
+        if (min_front_distance_ > front_distance_ * 1.5) {
+            recovery_counter_ = 0;
+            state_ = NavigationState::EXPLORE;
+        }
+    }
+
     void wallFollowingBehavior(geometry_msgs::msg::Twist& cmd_vel)
     {
-        // Right-hand wall following
+        // Bug2 wall following with M-line checking
         double wall_error = wall_distance_ - right_wall_distance_;
         double wall_derivative = wall_error - previous_wall_error_;
         previous_wall_error_ = wall_error;
@@ -226,14 +376,43 @@ private:
         }
 
         // Set velocities
-        cmd_vel.linear.x = max_linear_speed_ * 0.7;  // Reduced speed for better control
-        cmd_vel.angular.z = std::max(-max_angular_speed_, 
+        cmd_vel.linear.x = max_linear_speed_ * 0.6;  // Reduced speed for better control
+        cmd_vel.angular.z = std::max(-max_angular_speed_,
                                    std::min(max_angular_speed_, angular_correction));
 
-        // Check if we should switch to goal seeking
-        if (distance_to_goal < 2.0 && canSeeGoal()) {
-            state_ = NavigationState::GOAL_SEEKING;
+        // Bug2 algorithm: Check if we're back on M-line and closer to goal
+        if (isOnMLine(current_x_, current_y_)) {
+            double current_distance = distance_to_goal();
+            if (current_distance < closest_distance_to_goal_) {
+                closest_distance_to_goal_ = current_distance;
+                on_m_line_ = true;
+
+                // Check if we can see the goal
+                if (hasLineOfSight()) {
+                    state_ = NavigationState::GOAL_SEEK;
+                } else {
+                    state_ = NavigationState::EXPLORE;
+                }
+            }
         }
+
+        // Stuck detection
+        static double last_x = current_x_;
+        static double last_y = current_y_;
+        static int stuck_counter = 0;
+
+        if (std::abs(current_x_ - last_x) < 0.05 && std::abs(current_y_ - last_y) < 0.05) {
+            stuck_counter++;
+            if (stuck_counter > 100) {  // 10 seconds at 10Hz
+                state_ = NavigationState::RECOVERY;
+                stuck_counter = 0;
+            }
+        } else {
+            stuck_counter = 0;
+        }
+
+        last_x = current_x_;
+        last_y = current_y_;
     }
 
     void turningBehavior(geometry_msgs::msg::Twist& cmd_vel)
@@ -244,45 +423,59 @@ private:
 
         // Switch back to wall following when front is clear
         if (min_front_distance_ > front_distance_ * 1.2) {
-            state_ = NavigationState::WALL_FOLLOWING;
+            state_ = NavigationState::WALL_FOLLOW;
         }
     }
 
     void goalSeekingBehavior(geometry_msgs::msg::Twist& cmd_vel)
     {
-        // Calculate angle to goal
+        // Enhanced goal seeking with potential field method
         double angle_to_goal = std::atan2(goal_y_ - current_y_, goal_x_ - current_x_);
         double angle_error = angle_to_goal - current_yaw_;
-        
+
         // Normalize angle
         while (angle_error > M_PI) angle_error -= 2 * M_PI;
         while (angle_error < -M_PI) angle_error += 2 * M_PI;
 
         // Check for obstacles in path to goal
-        if (min_front_distance_ < front_distance_) {
-            state_ = NavigationState::WALL_FOLLOWING;
+        if (min_front_distance_ < front_distance_ || !hasLineOfSight()) {
+            state_ = NavigationState::WALL_FOLLOW;
             return;
         }
 
-        // Move towards goal
-        cmd_vel.linear.x = max_linear_speed_ * 0.8;
-        cmd_vel.angular.z = std::max(-max_angular_speed_, 
-                                   std::min(max_angular_speed_, 2.0 * angle_error));
+        // Potential field calculation
+        double attractive_force_x = (goal_x_ - current_x_) / distance_to_goal();
+        double attractive_force_y = (goal_y_ - current_y_) / distance_to_goal();
+
+        // Repulsive forces from obstacles
+        double repulsive_force_x = 0.0;
+        double repulsive_force_y = 0.0;
+
+        if (min_front_distance_ < 2.0) {
+            double repulsive_strength = 1.0 / (min_front_distance_ * min_front_distance_);
+            repulsive_force_x = -repulsive_strength * std::cos(current_yaw_);
+            repulsive_force_y = -repulsive_strength * std::sin(current_yaw_);
+        }
+
+        // Combine forces
+        double total_force_x = attractive_force_x + repulsive_force_x;
+        double total_force_y = attractive_force_y + repulsive_force_y;
+
+        // Calculate desired heading
+        double desired_angle = std::atan2(total_force_y, total_force_x);
+        double final_angle_error = desired_angle - current_yaw_;
+
+        // Normalize angle
+        while (final_angle_error > M_PI) final_angle_error -= 2 * M_PI;
+        while (final_angle_error < -M_PI) final_angle_error += 2 * M_PI;
+
+        // Move towards goal with potential field guidance
+        cmd_vel.linear.x = max_linear_speed_ * 0.9;
+        cmd_vel.angular.z = std::max(-max_angular_speed_,
+                                   std::min(max_angular_speed_, 2.5 * final_angle_error));
     }
 
-    bool canSeeGoal()
-    {
-        // Simple line-of-sight check (can be improved with ray tracing)
-        double angle_to_goal = std::atan2(goal_y_ - current_y_, goal_x_ - current_x_);
-        double relative_angle = angle_to_goal - current_yaw_;
-        
-        // Normalize angle
-        while (relative_angle > M_PI) relative_angle -= 2 * M_PI;
-        while (relative_angle < -M_PI) relative_angle += 2 * M_PI;
-        
-        // Check if goal is roughly in front and path seems clear
-        return (std::abs(relative_angle) < M_PI/4 && min_front_distance_ > 2.0);
-    }
+
 
     double distance_to_goal()
     {

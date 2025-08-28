@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="maze_bot">
 
-  <!-- Define robot parameters -->
-  <xacro:property name="base_width" value="0.31"/>
-  <xacro:property name="base_length" value="0.42"/>
-  <xacro:property name="base_height" value="0.18"/>
-  
+  <!-- Define robot parameters - Optimized for stability -->
+  <xacro:property name="base_width" value="0.40"/>   <!-- Increased for stability -->
+  <xacro:property name="base_length" value="0.45"/>  <!-- Slightly increased -->
+  <xacro:property name="base_height" value="0.12"/>  <!-- Lowered center of mass -->
+
   <xacro:property name="wheel_radius" value="0.10"/>
   <xacro:property name="wheel_width" value="0.04"/>
   <xacro:property name="wheel_ygap" value="0.025"/>
@@ -55,7 +55,7 @@
       </geometry>
     </collision>
 
-    <xacro:box_inertia m="15" w="${base_width}" d="${base_length}" h="${base_height}"/>
+    <xacro:box_inertia m="8.0" w="${base_width}" d="${base_length}" h="${base_height}"/>
   </link>
 
   <!-- Robot Footprint -->
@@ -87,7 +87,7 @@
         </geometry>
       </collision>
 
-      <xacro:cylinder_inertia m="0.5" r="${wheel_radius}" h="${wheel_width}"/>
+      <xacro:cylinder_inertia m="1.2" r="${wheel_radius}" h="${wheel_width}"/>
     </link>
 
     <joint name="${prefix}_joint" type="continuous">
@@ -119,7 +119,7 @@
       </geometry>
     </collision>
 
-    <xacro:sphere_inertia m="0.5" r="${(wheel_radius+wheel_zoff-(base_height/2))}"/>
+    <xacro:sphere_inertia m="0.8" r="${(wheel_radius+wheel_zoff-(base_height/2))}"/>
   </link>
 
   <joint name="caster_joint" type="fixed">
